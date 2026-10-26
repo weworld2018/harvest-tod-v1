@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harvest Tod : Simulasi Perkebunan & Industri Sawit</title>
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --primary-dark: #1b5e20;
+            --road: #8d6e63;
+            --grass: #81c784;
+            --grass-dark: #66bb6a;
+            --soil: #5d4037;
+            --soil-prep: #795548;
+            --cpo: #e65100;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        body {
+            background-color: #263238;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        /* Top Bar */
+        .hud-header {
+            background: linear-gradient(135deg, #1b5e20, #2e7d32);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .hud-brand h1 { font-size: 1.2rem; font-weight: 800; display: flex; align-items: center; gap: 8px;}
+        .hud-stats { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .hud-badge {
+            background: rgba(0, 0, 0, 0.35);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        /* Map Container */
+        .map-wrapper {
+            max-width: 1200px;
+            margin: 15px auto;
+            padding: 0 10px;
+        }
+
+        .plantation-map {
+            position: relative;
+            width: 100%;
+            height: 640px;
+            background: radial-gradient(circle at 50% 50%, var(--grass), var(--grass-dark));
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 4px solid #37474f;
+        }
+
+        /* Jalan Kebun (Dirt Road) */
+        .dirt-road {
+            position: absolute;
+            background: var(--road);
+            border: 3px dashed #6d4c41;
+            z-index: 1;
+        }
+        .road-horizontal {
+            top: 310px;
+            left: 200px;
+            width: 650px;
+            height: 48px;
+            border-left: none;
+            border-right: none;
+        }
+        .road-vertical {
+            top: 310px;
+            right: 320px;
+            width: 48px;
+            height: 250px;
+            border-top: none;
+            border-bottom: none;
+        }
+
+        /* Zone Labels */
+        .zone-label {
+            position: absolute;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 12px;
+            pointer-events: none;
+            z-index: 5;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* ================= ZONE 1: KEBUN RAKYAT ================= */
+        .zone-horti {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 480px;
+            height: 270px;
+            background: rgba(255,255,255,0.15);
+            border: 2px dashed rgba(255,255,255,0.4);
+            border-radius: 12px;
+            padding: 12px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            z-index: 2;
+        }
+
+        .plot-tile {
+            background: var(--soil);
+            border-radius: 8px;
+            border: 2px solid #3e2723;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.15s, box-shadow 0.15s;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        .plot-tile:hover {
+            transform: scale(1.04);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .plot-tile.prepared {
+            background: var(--soil-prep);
+            border-color: #8d6e63;
+        }
+        .plot-tile.ready {
+            box-shadow: 0 0 12px #ffeb3b;
+            animation: pulse 1s infinite alternate;
+        }
+        .plot-tile.locked {
+            background: #455a64;
+            border-color: #263238;
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        .plot-crop-icon { font-size: 2.2rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+        .plot-progress-bar {
+            position: absolute;
+            bottom: 4px;
+            left: 6px;
+            right: 6px;
+            height: 5px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .plot-progress-fill { height: 100%; width: 0%; background: #4caf50; }
+
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
+        }
+
+        /* ================= ZONE 2: NURSERY SAWIT ================= */
+        .zone-nursery {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 250px;
+            height: 140px;
+            background: #d7ccc8;
+            border: 3px solid #6d4c41;
+            border-radius: 10px;
+            padding: 8px;
+            cursor: pointer;
+            z-index: 2;
+            transition: transform 0.2s;
+        }
+        .zone-nursery:hover { transform: scale(1.02); }
+        .polybag-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 4px;
+            margin-top: 5px;
+        }
+        .polybag {
+            width: 28px;
+            height: 32px;
+            background: #212121;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        /* ================= ZONE 3: AFDELING KEBUN SAWIT ================= */
+        .zone-sawit-field {
+            position: absolute;
+            top: 180px;
+            right: 20px;
+            width: 440px;
+            height: 430px;
+            background: #4caf50;
+            border: 3px solid #2e7d32;
+            border-radius: 12px;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            z-index: 2;
+            cursor: pointer;
+        }
+        .sawit-tree-slot {
+            background: rgba(0,0,0,0.15);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .sawit-tree-slot .tree-icon {
+            font-size: 2.8rem;
+            filter: drop-shadow(0 3px 6px rgba(0,0,0,0.4));
+        }
+        .fruit-bunch {
+            position: absolute;
+            bottom: 6px;
+            background: #ff5722;
+            color: white;
+            font-size: 0.65rem;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 8px;
+            border: 1px solid #fff;
+            animation: bounce 0.6s infinite alternate;
+        }
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-3px); }
+        }
+
+        /* ================= ZONE 4: PABRIK KELAPA SAWIT (PKS) ================= */
+        .zone-pks {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 450px;
+            height: 250px;
+            background: #78909c;
+            border: 3px solid #37474f;
+            border-radius: 14px;
+            padding: 15px;
+            z-index: 2;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            color: white;
+        }
+        .pks-facade {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            margin-top: 15px;
+        }
+        .pks-chimney {
+            width: 28px;
+            height: 75px;
+            background: #455a64;
+            border-radius: 4px;
+            position: relative;
+        }
+        .chimney-smoke {
+            position: absolute;
+            top: -20px;
+            left: 2px;
+            font-size: 1.5rem;
+            opacity: 0;
+        }
+        .chimney-smoke.smoking {
+            animation: smokeRise 1.8s infinite;
+        }
+        @keyframes smokeRise {
+            0% { opacity: 0; transform: translateY(0) scale(0.6); }
+            50% { opacity: 0.8; }
+            100% { opacity: 0; transform: translateY(-35px) scale(1.6); }
+        }
+
+        .cpo-tank {
+            width: 70px;
+            height: 75px;
+            background: linear-gradient(to right, #b0bec5, #cfd8dc);
+            border-radius: 8px 8px 0 0;
+            border: 2px solid #37474f;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #263238;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        /* ================= TRUK ANGKUT SAWIT ANIMASI ================= */
+        .sawit-truck {
+            position: absolute;
+            top: 310px;
+            left: 170px;
+            font-size: 2.2rem;
+            z-index: 4;
+            transition: left 5s linear, top 2s ease;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+            pointer-events: none;
+        }
+
+        /* ================= INTERACTION DRAWER / MODAL ================= */
+        .info-panel {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 18px;
+            margin-top: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .panel-desc h3 { color: var(--primary-dark); margin-bottom: 4px; }
+        .panel-desc p { font-size: 0.85rem; color: #555; }
+        .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 9px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { background: var(--primary-dark); }
+        .btn:disabled { background: #90a4ae; cursor: not-allowed; }
+        .btn-warning { background: var(--cpo); }
+        .btn-warning:hover { background: #bf360c; }
+        .btn-blue { background: #0288d1; }
+        .btn-blue:hover { background: #01579b; }
+
+        /* Modal Dialog */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 300;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-box {
+            background: white;
+            border-radius: 12px;
+            padding: 22px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        /* Floating Notifications */
+        .toast {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            background: #212121;
+            color: #fff;
+            padding: 12px 22px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            display: none;
+            z-index: 500;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            border-left: 5px solid var(--primary);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HUD STATS TOP BAR -->
+    <header class="hud-header">
+        <div class="hud-brand">
+            <h1>🌴 Harvest Tod Estate Map</h1>
+        </div>
+        <div class="hud-stats">
+            <div class="hud-badge">💰 <span id="val-money">Rp 5.000</span></div>
+            <div class="hud-badge">🛢️ CPO: <span id="val-cpo">0</span> L</div>
+            <div class="hud-badge">🍈 TBS di PKS: <span id="val-pks-tbs">0</span></div>
+            <button class="btn btn-warning" onclick="openShopModal()">🛒 Toko & Upgrade</button>
+        </div>
+    </header>
+
+    <div class="map-wrapper">
+        <!-- THE VISUAL INTERACTIVE MAP -->
+        <div class="plantation-map" id="estateMap">
+
+            <!-- Jalan Perkebunan -->
+            <div class="dirt-road road-horizontal"></div>
+            <div class="dirt-road road-vertical"></div>
+
+            <!-- Truk Sawit Berjalan -->
+            <div class="sawit-truck" id="truckSprite">🚚💨</div>
+
+            <!-- ZONE 1: KEBUN HOLTIKULTURA & BUAH -->
+            <div class="zone-label" style="top: 25px; left: 25px;">🏡 Kebun Holtikultura (Klik Petak)</div>
+            <div class="zone-horti" id="hortiZone">
+                <!-- 8 Plots rendered dynamically -->
+            </div>
+
+            <!-- ZONE 2: NURSERY SAWIT -->
+            <div class="zone-label" style="top: 25px; right: 25px;">🌰 Nursery Pembibitan</div>
+            <div class="zone-nursery" onclick="interactNursery()">
+                <div style="font-size: 0.75rem; font-weight: bold; color: #4e342e;">Pembibitan Sawit</div>
+                <div style="font-size: 0.7rem; color: #555;">Kecambah: <b id="nursery-seed-count">0</b> | Siap: <b id="nursery-ready-count" style="color:var(--primary)">0</b></div>
+                <div class="polybag-grid" id="nurseryPolybagContainer">
+                    <!-- Polybags -->
+                </div>
+            </div>
+
+            <!-- ZONE 3: AFDELING KEBUN KELAPA SAWIT -->
+            <div class="zone-label" style="top: 185px; right: 25px;">🌴 Afdeling Kebun Sawit</div>
+            <div class="zone-sawit-field" id="sawitFieldZone" onclick="interactSawitField()">
+                <!-- Rendered dynamically -->
+            </div>
+
+            <!-- ZONE 4: PABRIK KELAPA SAWIT (PKS) -->
+            <div class="zone-label" style="bottom: 25px; left: 25px;">🏭 Pabrik Pengolahan (PKS)</div>
+            <div class="zone-pks" onclick="interactPKS()">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h4>PKS Sei Mangkei</h4>
+                    <span id="pks-status-tag" style="background:#263238; font-size:0.7rem; padding:2px 8px; border-radius:4px;">STANDBY</span>
+                </div>
+                <p style="font-size: 0.75rem; opacity: 0.85; margin: 4px 0 10px;">Klik untuk merebus buah TBS & ekspor CPO</p>
+
+                <div class="pks-facade">
+                    <div class="pks-chimney">
+                        <div class="chimney-smoke" id="smokeEffect">💨</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size: 2rem;">⚙️🏭</div>
+                        <div style="font-size:0.7rem; font-weight:bold;">Sterilizer & Press</div>
+                    </div>
+                    <div class="cpo-tank">
+                        <span style="font-size: 1.2rem;">🛢️</span>
+                        <span><b id="tank-cpo-val">0</b> L</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- LOWER ACTION / STATUS PANEL -->
+        <div class="info-panel" id="statusPanel">
+            <div class="panel-desc">
+                <h3 id="panelTitle">Selamat Datang di Harvest Tod Estate!</h3>
+                <p id="panelSubtitle">Klik langsung pada petak kebun sayur, kebun sawit, nursery, atau pabrik PKS di atas untuk beraktivitas.</p>
+            </div>
+            <div class="panel-actions" id="panelActions">
+                <!-- Action buttons contextually populated -->
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 1: TOKO BENIH & UPGRADE -->
+    <div class="modal" id="shopModal">
+        <div class="modal-box">
+            <h3 style="margin-bottom: 12px; color:var(--primary-dark);">🛒 Toko Pertanian & Lisensi</h3>
+            
+            <div style="margin-bottom: 15px;">
+                <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Bibit Hortikultura:</h4>
+                <div id="seedShopList" style="display: grid; gap: 8px;"></div>
+            </div>
+
+            <div style="border-top: 2px solid #eee; padding-top: 12px; margin-bottom: 15px;">
+                <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Ekspansi Sawit:</h4>
+                <div style="display: grid; gap: 8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#f5f5f5; padding:8px; border-radius:6px;">
+                        <div>
+                            <b>🌰 Kecambah Varietas DxP</b>
+                            <div style="font-size:0.75rem; color:#666;">Beli untuk disemai di Nursery</div>
+                        </div>
+                        <button class="btn" style="width:auto;" onclick="buySawitSeed()">Rp 8.000</button>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#f5f5f5; padding:8px; border-radius:6px;">
+                        <div>
+                            <b>🚚 Beli Dump Truk Ekstra</b>
+                            <div style="font-size:0.75rem; color:#666;">Mempercepat angkut TBS ke PKS</div>
+                        </div>
+                        <button class="btn btn-warning" style="width:auto;" onclick="buyTruck()">Rp 60.000</button>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#f5f5f5; padding:8px; border-radius:6px;">
+                        <div>
+                            <b>🗺️ Buka Petak Sayur Baru</b>
+                            <div style="font-size:0.75rem; color:#666;">Membuka petak tanah terkunci</div>
+                        </div>
+                        <button class="btn btn-blue" style="width:auto;" onclick="unlockNewPlot()">Rp 15.000</button>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" style="width:100%; background:#78909c;" onclick="closeModal('shopModal')">Tutup</button>
+        </div>
+    </div>
+
+    <!-- MODAL 2: PILIH BENIH UNTUK DITANAM -->
+    <div class="modal" id="plantModal">
+        <div class="modal-box">
+            <h3 style="margin-bottom: 10px;">Pilih Benih untuk Petak Ini</h3>
+            <div id="userSeedsContainer" style="display: grid; gap: 8px;"></div>
+            <button class="btn" style="width:100%; margin-top: 15px; background:#78909c;" onclick="closeModal('plantModal')">Batal</button>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast" id="toast">Notifikasi game</div>
+
+    <script>
+        /* ================= GAME DATA STATE ================= */
+        const CROPS_DEF = {
+            wortel: { name: 'Wortel Squose', icon: '🥕', time: 6, buyPrice: 400, sellPrice: 1000 },
+            tomat:  { name: 'Tomat Bejemdo', icon: '🍅', time: 10, buyPrice: 1500, sellPrice: 3800 },
+            apel:   { name: 'Apel Ngawi', icon: '🍎', time: 18, buyPrice: 5000, sellPrice: 13000 },
+            durian: { name: 'Durian Ngntod', icon: '🍈', time: 30, buyPrice: 20000, sellPrice: 52000 }
+        };
+
+        let state = {
+            money: 5000,
+            plots: [
+                { id: 0, state: 'empty', crop: null, timeLeft: 0, maxTime: 0, watered: false, unlocked: true },
+                { id: 1, state: 'empty', crop: null, timeLeft: 0, maxTime: 0, watered: false, unlocked: true },
+                { id: 2, state: 'empty', crop: null, timeLeft: 0, maxTime: 0, watered: false, unlocked: true },
+                { id: 3, state: 'empty', crop: null, timeLeft: 0, maxTime: 0, watered: false, unlocked: true },
+                { id: 4, state: 'locked', crop: null, timeLeft: 0, maxTime: 0, watered: false, unlocked: false },
+                { id: 5, state: 'locked', crop: null, timeLeft: 0, maxTime: 0, watered: false, unlocked: false },
+                { id: 6, state: 'locked', crop: null, timeLeft: 0, maxTime: 0, watered: false, unlocked: false },
+                { id: 7, state: 'locked', crop: null, timeLeft: 0, maxTime: 0, watered: false, unlocked: false }
+            ],
+            inventory: { wortel: 3, tomat: 0, apel: 0, durian: 0 },
+            sawit: {
+                unlocked: true,
+                nurserySeeds: 2,
+                nurseryReady: 1,
+                nurseryProgress: 0,
+                trees: 4,
+                maxTrees: 8,
+                fieldTBS: 0,
+                tphTBS: 0,
+                tbsTimer: 0,
+                truckCount: 1,
+                truckBusy: false,
+                pksTBS: 0,
+                pksCPO: 0,
+                pksRunning: false,
+                pksProgress: 0
+            }
+        };
+
+        let activePlotIndex = null;
+
+        /* ================= AUDIO SYNTHESIS ================= */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSfx(freq, type = 'sine', duration = 0.12) {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+        function soundCoin() { playSfx(987, 'triangle', 0.1); setTimeout(() => playSfx(1318, 'triangle', 0.2), 80); }
+        function soundDig() { playSfx(180, 'sawtooth', 0.15); }
+        function soundTruck() { playSfx(140, 'square', 0.4); }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.style.display = 'block';
+            clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 2400);
+        }
+
+        function formatIDR(num) {
+            return 'Rp ' + num.toLocaleString('id-ID');
+        }
+
+        /* ================= HORTIKULTURA LOGIC ================= */
+        function onPlotClick(idx) {
+            const plot = state.plots[idx];
+            if (!plot.unlocked) {
+                showToast("Petak lahan masih terkunci! Buka petak ini melalui Toko.");
+                return;
+            }
+
+            if (plot.state === 'empty') {
+                plot.state = 'prepared';
+                soundDig();
+                showToast("Tanah digemburkan! Siap ditanami benih.");
+            } else if (plot.state === 'prepared') {
+                activePlotIndex = idx;
+                openPlantModal();
+            } else if (plot.state === 'growing') {
+                if (!plot.watered) {
+                    plot.watered = true;
+                    playSfx(440, 'sine', 0.2);
+                    showToast("Tanaman disiram air! Tumbuh 2x lebih cepat.");
+                } else {
+                    showToast(`Sedang tumbuh! Sisa waktu: ${plot.timeLeft}s.`);
+                }
+            } else if (plot.state === 'ready') {
+                const def = CROPS_DEF[plot.crop];
+                state.money += def.sellPrice;
+                soundCoin();
+                showToast(`Panen ${def.name}! Terjual otomatis seharga ${formatIDR(def.sellPrice)}.`);
+                plot.state = 'empty';
+                plot.crop = null;
+                plot.watered = false;
+            }
+            renderMap();
+        }
+
+        function openPlantModal() {
+            const list = document.getElementById('userSeedsContainer');
+            list.innerHTML = '';
+            let hasAny = false;
+
+            for (let key in state.inventory) {
+                const count = state.inventory[key];
+                if (count > 0) {
+                    hasAny = true;
+                    const def = CROPS_DEF[key];
+                    const div = document.createElement('div');
+                    div.style = 'display:flex; justify-content:space-between; align-items:center; background:#f0f4f8; padding:8px; border-radius:6px;';
+                    div.innerHTML = `
+                        <div>
+                            <span style="font-size:1.4rem">${def.icon}</span> <b>${def.name}</b>
+                            <div style="font-size:0.75rem; color:#666">Stok benih: ${count}</div>
+                        </div>
+                        <button class="btn" onclick="plantCrop('${key}')">Tanam</button>
+                    `;
+                    list.appendChild(div);
+                }
+            }
+
+            if (!hasAny) {
+                list.innerHTML = `<p style="color:#d32f2f; text-align:center;">Anda tidak punya benih! Beli di Toko dahulu.</p>`;
+            }
+
+            document.getElementById('plantModal').classList.add('active');
+        }
+
+        function plantCrop(seedKey) {
+            if (activePlotIndex === null) return;
+            if (state.inventory[seedKey] <= 0) return;
+
+            state.inventory[seedKey]--;
+            const plot = state.plots[activePlotIndex];
+            plot.state = 'growing';
+            plot.crop = seedKey;
+            plot.timeLeft = CROPS_DEF[seedKey].time;
+            plot.maxTime = CROPS_DEF[seedKey].time;
+            plot.watered = false;
+
+            playSfx(300, 'sine', 0.15);
+            showToast(`Menanam benih ${CROPS_DEF[seedKey].name}!`);
+            closeModal('plantModal');
+            renderMap();
+        }
+
+        /* ================= SAWIT & LOGISTICS ================= */
+        function interactNursery() {
+            const panelTitle = document.getElementById('panelTitle');
+            const panelSubtitle = document.getElementById('panelSubtitle');
+            const panelActions = document.getElementById('panelActions');
+
+            panelTitle.innerText = "🌰 Fasilitas Nursery Pembibitan Kelapa Sawit";
+            panelSubtitle.innerText = `Kecambah polybag: ${state.sawit.nurserySeeds} btg | Bibit siap tanam: ${state.sawit.nurseryReady} btg.`;
+            
+            panelActions.innerHTML = `
+                <button class="btn" onclick="buySawitSeed()">🌱 Beli Kecambah (Rp 8.000)</button>
+                <button class="btn btn-warning" onclick="plantReadySeedToField()" ${state.sawit.nurseryReady <= 0 ? 'disabled':''}>🌴 Pindahkan Bibit ke Afdeling</button>
+            `;
+        }
+
+        function buySawitSeed() {
+            if (state.money >= 8000) {
+                state.money -= 8000;
+                state.sawit.nurserySeeds++;
+                soundCoin();
+                showToast("1 Kecambah Sawit DxP masuk bedengan nursery!");
+                renderMap();
+                interactNursery();
+            } else {
+                showToast("Uang tidak cukup untuk beli kecambah sawit!");
+            }
+        }
+
+        function plantReadySeedToField() {
+            if (state.sawit.nurseryReady <= 0) return;
+            if (state.sawit.trees >= state.sawit.maxTrees) {
+                showToast("Afdeling kebun sawit sudah penuh kapasitasnya!");
+                return;
+            }
+            state.sawit.nurseryReady--;
+            state.sawit.trees++;
+            playSfx(200, 'triangle', 0.2);
+            showToast("Bibit sawit berhasil ditanam di blok afdeling!");
+            renderMap();
+            interactNursery();
+        }
+
+        function interactSawitField() {
+            const panelTitle = document.getElementById('panelTitle');
+            const panelSubtitle = document.getElementById('panelSubtitle');
+            const panelActions = document.getElementById('panelActions');
+
+            panelTitle.innerText = "🌴 Afdeling Perkebunan Kelapa Sawit";
+            panelSubtitle.innerText = `Pohon: ${state.sawit.trees} pokok | TBS Matang di pohon: ${state.sawit.fieldTBS} janjang | TBS di TPH: ${state.sawit.tphTBS} janjang.`;
+
+            panelActions.innerHTML = `
+                <button class="btn btn-warning" onclick="harvestSawitTBS()" ${state.sawit.fieldTBS <= 0 ? 'disabled':''}>🪓 Egrek / Panen TBS Matang</button>
+                <button class="btn btn-blue" onclick="dispatchLogisticsTruck()" ${state.sawit.tphTBS <= 0 || state.sawit.truckBusy ? 'disabled':''}>🚚 Angkut TBS ke Pabrik PKS</button>
+            `;
+        }
+
+        function harvestSawitTBS() {
+            if (state.sawit.fieldTBS <= 0) return;
+            const harvested = state.sawit.fieldTBS;
+            state.sawit.tphTBS += harvested;
+            state.sawit.fieldTBS = 0;
+            soundDig();
+            showToast(`Berhasil egrek ${harvested} TBS ke Tempat Pengumpulan Hasil (TPH)!`);
+            renderMap();
+            interactSawitField();
+        }
+
+        function dispatchLogisticsTruck() {
+            if (state.sawit.truckBusy || state.sawit.tphTBS <= 0) return;
+
+            const capacity = state.sawit.truckCount * 12;
+            const transported = Math.min(state.sawit.tphTBS, capacity);
+            state.sawit.tphTBS -= transported;
+            state.sawit.truckBusy = true;
+
+            soundTruck();
+            showToast(`🚚 Truk memuat ${transported} TBS menuju Pabrik PKS!`);
+
+            // ANIMASI FISIK TRUK BERJALAN DI PETA
+            const truck = document.getElementById('truckSprite');
+            // 1. Truk bergerak dari Kebun (kanan) ke PKS (kiri)
+            truck.style.left = "780px";
+            truck.style.top = "420px";
+            
+            setTimeout(() => {
+                truck.style.left = "400px";
+                truck.style.top = "310px";
+            }, 1000);
+
+            setTimeout(() => {
+                truck.style.left = "180px";
+                truck.style.top = "400px";
+            }, 3000);
+
+            // Tiba di Pabrik
+            setTimeout(() => {
+                state.sawit.truckBusy = false;
+                state.sawit.pksTBS += transported;
+                showToast(`✅ Truk tiba di PKS! ${transported} TBS dibongkar.`);
+                // Reset posisi truk
+                truck.style.left = "200px";
+                truck.style.top = "310px";
+                renderMap();
+                interactSawitField();
+            }, 5500);
+
+            renderMap();
+        }
+
+        /* ================= PABRIK KELAPA SAWIT (PKS) ================= */
+        function interactPKS() {
+            const panelTitle = document.getElementById('panelTitle');
+            const panelSubtitle = document.getElementById('panelSubtitle');
+            const panelActions = document.getElementById('panelActions');
+
+            panelTitle.innerText = "🏭 Pabrik Kelapa Sawit (PKS)";
+            panelSubtitle.innerText = `TBS di Hopper: ${state.sawit.pksTBS} janjang | Minyak CPO: ${state.sawit.pksCPO} Liter.`;
+
+            panelActions.innerHTML = `
+                <button class="btn btn-warning" onclick="startMillProcess()" ${state.sawit.pksTBS <= 0 || state.sawit.pksRunning ? 'disabled':''}>⚙️ Rebus & Giling TBS ke CPO</button>
+                <button class="btn btn-blue" onclick="sellCPOCommodity()" ${state.sawit.pksCPO <= 0 ? 'disabled':''}>🚢 Jual CPO (Rp 15.000/L)</button>
+            `;
+        }
+
+        function startMillProcess() {
+            if (state.sawit.pksRunning || state.sawit.pksTBS <= 0) return;
+            state.sawit.pksRunning = true;
+            state.sawit.pksProgress = 0;
+            playSfx(120, 'square', 0.5);
+            showToast("Mesin Sterilizer & Screw Press PKS mulai aktif!");
+            document.getElementById('smokeEffect').classList.add('smoking');
+            document.getElementById('pks-status-tag').innerText = "PENGOLAHAN AKTIF";
+            document.getElementById('pks-status-tag').style.background = "#e65100";
+            renderMap();
+            interactPKS();
+        }
+
+        function sellCPOCommodity() {
+            if (state.sawit.pksCPO <= 0) return;
+            const liters = state.sawit.pksCPO;
+            const earnings = liters * 15000;
+            state.money += earnings;
+            state.sawit.pksCPO = 0;
+            soundCoin();
+            showToast(`🎉 Berhasil ekspor ${liters} L CPO! Dana diterima: ${formatIDR(earnings)}.`);
+            renderMap();
+            interactPKS();
+        }
+
+        /* ================= SHOP & UPGRADES ================= */
+        function openShopModal() {
+            const list = document.getElementById('seedShopList');
+            list.innerHTML = '';
+
+            for (let key in CROPS_DEF) {
+                const def = CROPS_DEF[key];
+                const div = document.createElement('div');
+                div.style = 'display:flex; justify-content:space-between; align-items:center; background:#f5f5f5; padding:8px; border-radius:6px;';
+                div.innerHTML = `
+                    <div>
+                        <span style="font-size:1.4rem">${def.icon}</span> <b>${def.name}</b>
+                        <div style="font-size:0.75rem; color:#666">Harga: ${formatIDR(def.buyPrice)} | Hasil: ${formatIDR(def.sellPrice)}</div>
+                    </div>
+                    <button class="btn" onclick="buyCropSeed('${key}')">Beli</button>
+                `;
+                list.appendChild(div);
+            }
+            document.getElementById('shopModal').classList.add('active');
+        }
+
+        function buyCropSeed(key) {
+            const def = CROPS_DEF[key];
+            if (state.money >= def.buyPrice) {
+                state.money -= def.buyPrice;
+                state.inventory[key] = (state.inventory[key] || 0) + 1;
+                soundCoin();
+                showToast(`Membeli benih ${def.name}!`);
+                renderMap();
+                openShopModal();
+            } else {
+                showToast("Uang tidak cukup!");
+            }
+        }
+
+        function buyTruck() {
+            if (state.money >= 60000) {
+                state.money -= 60000;
+                state.sawit.truckCount++;
+                soundCoin();
+                showToast("Armada Dump Truk baru siap beroperasi!");
+                renderMap();
+            } else {
+                showToast("Uang kas tidak cukup!");
+            }
+        }
+
+        function unlockNewPlot() {
+            const lockedPlot = state.plots.find(p => !p.unlocked);
+            if (!lockedPlot) {
+                showToast("Semua petak lahan sayur sudah terbuka!");
+                return;
+            }
+            if (state.money >= 15000) {
+                state.money -= 15000;
+                lockedPlot.unlocked = true;
+                lockedPlot.state = 'empty';
+                soundCoin();
+                showToast("1 Petak tanah hortikultura baru berhasil dibuka!");
+                renderMap();
+            } else {
+                showToast("Uang kas tidak cukup!");
+            }
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        /* ================= GAME LOOP (1 DETIK) ================= */
+        setInterval(() => {
+            // 1. Tumbuh Hortikultura
+            state.plots.forEach(plot => {
+                if (plot.state === 'growing') {
+                    const speed = plot.watered ? 2 : 1;
+                    plot.timeLeft -= speed;
+                    if (plot.timeLeft <= 0) {
+                        plot.timeLeft = 0;
+                        plot.state = 'ready';
+                    }
+                }
+            });
+
+            // 2. Tumbuh Nursery Sawit
+            if (state.sawit.nurserySeeds > 0) {
+                state.sawit.nurseryProgress += 20;
+                if (state.sawit.nurseryProgress >= 100) {
+                    state.sawit.nurseryProgress = 0;
+                    state.sawit.nurserySeeds--;
+                    state.sawit.nurseryReady++;
+                }
+            }
+
+            // 3. Produksi Buah TBS di Pohon Sawit
+            if (state.sawit.trees > 0) {
+                state.sawit.tbsTimer += 10;
+                if (state.sawit.tbsTimer >= 100) {
+                    state.sawit.tbsTimer = 0;
+                    state.sawit.fieldTBS += Math.ceil(state.sawit.trees * 0.5);
+                }
+            }
+
+            // 4. Pabrik PKS Mengolah TBS
+            if (state.sawit.pksRunning) {
+                state.sawit.pksProgress += 25;
+                if (state.sawit.pksProgress >= 100) {
+                    state.sawit.pksProgress = 0;
+                    const milled = Math.min(state.sawit.pksTBS, 6);
+                    state.sawit.pksTBS -= milled;
+                    state.sawit.pksCPO += (milled * 4); // 1 TBS = 4 L CPO
+
+                    if (state.sawit.pksTBS <= 0) {
+                        state.sawit.pksRunning = false;
+                        document.getElementById('smokeEffect').classList.remove('smoking');
+                        document.getElementById('pks-status-tag').innerText = "STANDBY";
+                        document.getElementById('pks-status-tag').style.background = "#263238";
+                        showToast("Pengolahan TBS di PKS selesai!");
+                    }
+                }
+            }
+
+            renderMap();
+        }, 1000);
+
+        /* ================= VISUAL MAP RENDERING ================= */
+        function renderMap() {
+            // Top HUD
+            document.getElementById('val-money').innerText = formatIDR(state.money);
+            document.getElementById('val-cpo').innerText = state.sawit.pksCPO;
+            document.getElementById('val-pks-tbs').innerText = state.sawit.pksTBS;
+            document.getElementById('tank-cpo-val').innerText = state.sawit.pksCPO;
+
+            // Render Zone 1: Horti Plots
+            const hortiZone = document.getElementById('hortiZone');
+            hortiZone.innerHTML = '';
+            state.plots.forEach((plot, i) => {
+                const el = document.createElement('div');
+                el.className = `plot-tile ${plot.state} ${!plot.unlocked ? 'locked' : ''}`;
+                el.onclick = () => onPlotClick(i);
+
+                if (!plot.unlocked) {
+                    el.innerHTML = `<span style="font-size:1.5rem">🔒</span>`;
+                } else if (plot.state === 'empty') {
+                    el.innerHTML = `<span style="font-size:1.4rem">🟫</span><span style="font-size:0.6rem; color:#bbb;">Tandus</span>`;
+                } else if (plot.state === 'prepared') {
+                    el.innerHTML = `<span style="font-size:1.4rem">🌱</span><span style="font-size:0.6rem; color:#a5d6a7;">Siap</span>`;
+                } else if (plot.state === 'growing') {
+                    const def = CROPS_DEF[plot.crop];
+                    const percent = Math.round(((plot.maxTime - plot.timeLeft) / plot.maxTime) * 100);
+                    el.innerHTML = `
+                        <div class="plot-crop-icon">${def.icon}</div>
+                        <div class="plot-progress-bar"><div class="plot-progress-fill" style="width:${percent}%"></div></div>
+                    `;
+                } else if (plot.state === 'ready') {
+                    const def = CROPS_DEF[plot.crop];
+                    el.innerHTML = `
+                        <div class="plot-crop-icon">${def.icon}</div>
+                        <span style="font-size:0.65rem; background:#ffeb3b; color:#000; font-weight:bold; padding:1px 4px; border-radius:4px;">PANEN!</span>
+                    `;
+                }
+                hortiZone.appendChild(el);
+            });
+
+            // Render Zone 2: Nursery Polybags
+            document.getElementById('nursery-seed-count').innerText = state.sawit.nurserySeeds;
+            document.getElementById('nursery-ready-count').innerText = state.sawit.nurseryReady;
+            const polyContainer = document.getElementById('nurseryPolybagContainer');
+            polyContainer.innerHTML = '';
+            for (let i = 0; i < 12; i++) {
+                const pb = document.createElement('div');
+                pb.className = 'polybag';
+                if (i < state.sawit.nurseryReady) {
+                    pb.innerHTML = '🌿';
+                } else if (i < (state.sawit.nurseryReady + state.sawit.nurserySeeds)) {
+                    pb.innerHTML = '🌱';
+                } else {
+                    pb.innerHTML = '';
+                }
+                polyContainer.appendChild(pb);
+            }
+
+            // Render Zone 3: Sawit Afdeling Trees
+            const sawitZone = document.getElementById('sawitFieldZone');
+            sawitZone.innerHTML = '';
+            for (let i = 0; i < state.sawit.maxTrees; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'sawit-tree-slot';
+                if (i < state.sawit.trees) {
+                    slot.innerHTML = `<div class="tree-icon">🌴</div>`;
+                    if (state.sawit.fieldTBS > i) {
+                        slot.innerHTML += `<div class="fruit-bunch">🍈 TBS</div>`;
+                    }
+                } else {
+                    slot.innerHTML = `<span style="opacity:0.2; font-size:1.8rem;">➕</span>`;
+                }
+                sawitZone.appendChild(slot);
+            }
+        }
+
+        // Jalankan render awal
+        window.onload = () => {
+            renderMap();
+        };
+    </script>
+</body>
+</html>
